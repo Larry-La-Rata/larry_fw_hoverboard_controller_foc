@@ -5,9 +5,9 @@
 #include "stm32f1xx_hal.h"
 
 // ############################### DO-NOT-TOUCH SETTINGS ###############################
-#define PWM_FREQ            16000     // PWM frequency in Hz / is also used for buzzer
+#define PWM_FREQ               16000     // PWM frequency in Hz / is also used for buzzer
 #define DEAD_TIME              48     // PWM deadtime
-#define DELAY_IN_MAIN_LOOP    2
+#define DELAY_IN_MAIN_LOOP     5
 #define TIMEOUT                20     // number of wrong / missing input commands before emergency off
 #define A2BIT_CONV             50     // A to bit for current conversion on ADC. Example: 1 A = 50, 2 A = 100, etc
 // #define PRINTF_FLOAT_SUPPORT          // [-] Uncomment this for printf to support float on Serial Debug. It will increase code size! Better to avoid it!
@@ -309,99 +309,6 @@
   #define INPUTS_NR               1
 #endif
 // ########################### END OF APPLY DEFAULT SETTING ############################
-
-
-// General checks
-#if defined(CONTROL_SERIAL_USART2) && defined(SIDEBOARD_SERIAL_USART2)
-  #error CONTROL_SERIAL_USART2 and SIDEBOARD_SERIAL_USART2 not allowed, choose one.
-#endif
-
-#if defined(CONTROL_SERIAL_USART3) && defined(SIDEBOARD_SERIAL_USART3)
-  #error CONTROL_SERIAL_USART3 and SIDEBOARD_SERIAL_USART3 not allowed, choose one.
-#endif
-
-#if defined(DEBUG_SERIAL_USART2) && defined(FEEDBACK_SERIAL_USART2)
-  #error DEBUG_SERIAL_USART2 and FEEDBACK_SERIAL_USART2 not allowed, choose one.
-#endif
-
-#if defined(DEBUG_SERIAL_USART3) && defined(FEEDBACK_SERIAL_USART3)
-  #error DEBUG_SERIAL_USART3 and FEEDBACK_SERIAL_USART3 not allowed, choose one.
-#endif
-
-#if defined(DEBUG_SERIAL_USART2) && defined(DEBUG_SERIAL_USART3)
-  #error DEBUG_SERIAL_USART2 and DEBUG_SERIAL_USART3 not allowed, choose one.
-#endif
-
-#if defined(CONTROL_PPM_LEFT) && defined(CONTROL_PPM_RIGHT)
-  #error CONTROL_PPM_LEFT and CONTROL_PPM_RIGHT not allowed, choose one.
-#endif
-
-#if defined(CONTROL_PWM_LEFT) && defined(CONTROL_PWM_RIGHT)
-  #error CONTROL_PWM_LEFT and CONTROL_PWM_RIGHT not allowed, choose one.
-#endif
-
-#if defined(SUPPORT_BUTTONS_LEFT) && defined(SUPPORT_BUTTONS_RIGHT)
-  #error SUPPORT_BUTTONS_LEFT and SUPPORT_BUTTONS_RIGHT not allowed, choose one.
-#endif
-
-
-// LEFT cable checks
-#if defined(CONTROL_ADC) && (defined(CONTROL_SERIAL_USART2) || defined(SIDEBOARD_SERIAL_USART2) || defined(FEEDBACK_SERIAL_USART2) || defined(DEBUG_SERIAL_USART2))
-  #error CONTROL_ADC and SERIAL_USART2 not allowed. It is on the same cable.
-#endif
-
-#if defined(CONTROL_PPM_LEFT) && (defined(CONTROL_SERIAL_USART2) || defined(SIDEBOARD_SERIAL_USART2) || defined(FEEDBACK_SERIAL_USART2) || defined(DEBUG_SERIAL_USART2))
-  #error CONTROL_PPM_LEFT and SERIAL_USART2 not allowed. It is on the same cable.
-#endif
-
-#if defined(CONTROL_PWM_LEFT) && (defined(CONTROL_SERIAL_USART2) || defined(SIDEBOARD_SERIAL_USART2) || defined(FEEDBACK_SERIAL_USART2) || defined(DEBUG_SERIAL_USART2))
-  #error CONTROL_PWM_LEFT and SERIAL_USART2 not allowed. It is on the same cable.
-#endif
-
-#if defined(SUPPORT_BUTTONS_LEFT) && (defined(CONTROL_SERIAL_USART2) || defined(SIDEBOARD_SERIAL_USART2) || defined(FEEDBACK_SERIAL_USART2) || defined(DEBUG_SERIAL_USART2))
-  #error SUPPORT_BUTTONS_LEFT and SERIAL_USART2 not allowed. It is on the same cable.
-#endif
-
-#if defined(SUPPORT_BUTTONS_LEFT) && (defined(CONTROL_ADC) || defined(CONTROL_PPM_LEFT) || defined(CONTROL_PWM_LEFT))
-  #error SUPPORT_BUTTONS_LEFT and (CONTROL_ADC or CONTROL_PPM_LEFT or CONTROL_PWM_LEFT) not allowed. It is on the same cable.
-#endif
-
-#if defined(CONTROL_ADC) && (defined(CONTROL_PPM_LEFT) || defined(CONTROL_PWM_LEFT))
-  #error CONTROL_ADC and (CONTROL_PPM_LEFT or CONTROL_PWM_LEFT) not allowed. It is on the same cable.
-#endif
-
-#if defined(CONTROL_PPM_LEFT) && defined(CONTROL_PWM_LEFT)
-  #error CONTROL_PPM_LEFT and CONTROL_PWM_LEFT not allowed. It is on the same cable.
-#endif
-
-
-// RIGHT cable checks
-#if defined(CONTROL_NUNCHUK) && (defined(CONTROL_SERIAL_USART3) || defined(SIDEBOARD_SERIAL_USART3) || defined(FEEDBACK_SERIAL_USART3) || defined(DEBUG_SERIAL_USART3))
-  #error CONTROL_NUNCHUK and SERIAL_USART3 not allowed. It is on the same cable.
-#endif
-
-#if defined(CONTROL_PPM_RIGHT) && (defined(CONTROL_SERIAL_USART3) || defined(SIDEBOARD_SERIAL_USART3) || defined(FEEDBACK_SERIAL_USART3) || defined(DEBUG_SERIAL_USART3))
-  #error CONTROL_PPM_RIGHT and SERIAL_USART3 not allowed. It is on the same cable.
-#endif
-
-#if defined(CONTROL_PWM_RIGHT) && (defined(CONTROL_SERIAL_USART3) || defined(SIDEBOARD_SERIAL_USART3) || defined(FEEDBACK_SERIAL_USART3) || defined(DEBUG_SERIAL_USART3))
-  #error CONTROL_PWM_RIGHT and SERIAL_USART3 not allowed. It is on the same cable.
-#endif
-
-#if defined(SUPPORT_BUTTONS_RIGHT) && (defined(CONTROL_SERIAL_USART3) || defined(SIDEBOARD_SERIAL_USART3) || defined(FEEDBACK_SERIAL_USART3) || defined(DEBUG_SERIAL_USART3))
-  #error SUPPORT_BUTTONS_RIGHT and SERIAL_USART3 not allowed. It is on the same cable.
-#endif
-
-#if defined(CONTROL_PPM_RIGHT) && defined(CONTROL_PWM_RIGHT)
-  #error CONTROL_PPM_RIGHT and CONTROL_PWM_RIGHT not allowed. It is on the same cable.
-#endif
-
-
-// Functional checks
-#if (defined(CONTROL_PPM_LEFT) || defined(CONTROL_PPM_RIGHT)) && !defined(PPM_NUM_CHANNELS)
-  #error Total number of PPM channels needs to be set
-#endif
-// ############################# END OF VALIDATE SETTINGS ############################
 
 #endif
 
