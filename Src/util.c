@@ -29,7 +29,6 @@
 #include "util.h"
 #include "BLDC_controller.h"
 #include "rtwtypes.h"
-#include "comms.h"
 
 /* =========================== Variable Definitions =========================== */
 

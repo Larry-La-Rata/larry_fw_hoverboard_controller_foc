@@ -338,8 +338,4 @@ nunchuk_state Nunchuk_Read(void) {
     timeoutFlgGen = 0;
   }
   return nunchukState;
-  //setScopeChannel(0, (int)nunchuk_data[0]);
-  //setScopeChannel(1, (int)nunchuk_data[1]);
-  //setScopeChannel(2, (int)nunchuk_data[5] & 1);
-  //setScopeChannel(3, ((int)nunchuk_data[5] >> 1) & 1);
 }

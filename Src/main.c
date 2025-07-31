@@ -29,7 +29,6 @@
 #include "util.h"
 #include "BLDC_controller.h"      /* BLDC's header file */
 #include "rtwtypes.h"
-#include "comms.h"
 
 void SystemClock_Config(void);
 
