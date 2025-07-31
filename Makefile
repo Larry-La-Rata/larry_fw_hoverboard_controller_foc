@@ -115,9 +115,6 @@ endif
 # Generate dependency information
 CFLAGS += -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@:%.o=%.d)"
 
-# Choose variant from env var
-# make -e VARIANT=VARIANT_ADC
-
 ifneq ($(VARIANT), )
 CFLAGS += -D $(VARIANT)
 endif

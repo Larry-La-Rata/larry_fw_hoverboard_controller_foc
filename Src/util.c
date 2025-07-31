@@ -31,10 +31,6 @@
 #include "rtwtypes.h"
 #include "comms.h"
 
-#if defined(DEBUG_I2C_LCD) || defined(SUPPORT_LCD)
-#include "hd44780.h"
-#endif
-
 /* =========================== Variable Definitions =========================== */
 
 //------------------------------------------------------------------------
@@ -107,22 +103,8 @@ uint8_t  timeoutFlgSerial = 0;          // Timeout Flag for Rx Serial command: 0
 uint8_t  ctrlModReqRaw = CTRL_MOD_REQ;
 uint8_t  ctrlModReq    = CTRL_MOD_REQ;  // Final control mode request 
 
-#if defined(DEBUG_I2C_LCD) || defined(SUPPORT_LCD)
-LCD_PCF8574_HandleTypeDef lcd;
-#endif
-
-#ifdef VARIANT_TRANSPOTTER
-float    setDistance;
-uint16_t VirtAddVarTab[NB_OF_VAR] = {1337};       // Virtual address defined by the user: 0xFFFF value is prohibited
-static   uint16_t saveValue       = 0;
-static   uint8_t  saveValue_valid = 0;
-#elif !defined(VARIANT_HOVERBOARD) && !defined(VARIANT_TRANSPOTTER)
 uint16_t VirtAddVarTab[NB_OF_VAR] = {1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009,
                                      1010, 1011, 1012, 1013, 1014, 1015, 1016, 1017, 1018};
-#else
-uint16_t VirtAddVarTab[NB_OF_VAR] = {1000};       // Dummy virtual address to avoid warnings
-#endif
-
 
 //------------------------------------------------------------------------
 // Local variables
@@ -131,10 +113,8 @@ static int16_t INPUT_MAX;             // [-] Input target maximum limitation
 static int16_t INPUT_MIN;             // [-] Input target minimum limitation
 
 
-#if !defined(VARIANT_HOVERBOARD) && !defined(VARIANT_TRANSPOTTER)
-  static uint8_t  cur_spd_valid  = 0;
-  static uint8_t  inp_cal_valid  = 0;
-#endif
+static uint8_t  cur_spd_valid  = 0;
+static uint8_t  inp_cal_valid  = 0;
 
 #if defined(CONTROL_ADC)
 static uint16_t timeoutCntADC = ADC_PROTECT_TIMEOUT;  // Timeout counter for ADC Protection
@@ -189,10 +169,6 @@ static uint32_t commandR_len = sizeof(commandR);
 #if defined(SUPPORT_BUTTONS) || defined(SUPPORT_BUTTONS_LEFT) || defined(SUPPORT_BUTTONS_RIGHT)
 static uint8_t button1;                 // Blue
 static uint8_t button2;                 // Green
-#endif
-
-#ifdef VARIANT_HOVERCAR
-static uint8_t brakePressed;
 #endif
 
 #if defined(CRUISE_CONTROL_SUPPORT) || (defined(STANDSTILL_HOLD_ENABLE) && (CTRL_TYP_SEL == FOC_CTRL) && (CTRL_MOD_REQ != SPD_MODE))
@@ -297,105 +273,53 @@ void Input_Init(void) {
     UART_DisableRxErrors(&huart3);
   #endif
 
-  #if !defined(VARIANT_HOVERBOARD) && !defined(VARIANT_TRANSPOTTER)
-    uint16_t writeCheck, readVal;
-    HAL_FLASH_Unlock();
-    EE_Init();            /* EEPROM Init */
-    EE_ReadVariable(VirtAddVarTab[0], &writeCheck);
-    if (writeCheck == FLASH_WRITE_KEY) {
-      #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
-        printf("Using the configuration from EEprom\r\n");
-      #endif
-
-      EE_ReadVariable(VirtAddVarTab[1] , &readVal); rtP_Left.i_max = rtP_Right.i_max = (int16_t)readVal;
-      EE_ReadVariable(VirtAddVarTab[2] , &readVal); rtP_Left.n_max = rtP_Right.n_max = (int16_t)readVal;
-      for (uint8_t i=0; i<INPUTS_NR; i++) {
-        EE_ReadVariable(VirtAddVarTab[ 3+8*i] , &readVal); input1[i].typ = (uint8_t)readVal;
-        EE_ReadVariable(VirtAddVarTab[ 4+8*i] , &readVal); input1[i].min = (int16_t)readVal;
-        EE_ReadVariable(VirtAddVarTab[ 5+8*i] , &readVal); input1[i].mid = (int16_t)readVal;
-        EE_ReadVariable(VirtAddVarTab[ 6+8*i] , &readVal); input1[i].max = (int16_t)readVal;
-        EE_ReadVariable(VirtAddVarTab[ 7+8*i] , &readVal); input2[i].typ = (uint8_t)readVal;
-        EE_ReadVariable(VirtAddVarTab[ 8+8*i] , &readVal); input2[i].min = (int16_t)readVal;
-        EE_ReadVariable(VirtAddVarTab[ 9+8*i] , &readVal); input2[i].mid = (int16_t)readVal;
-        EE_ReadVariable(VirtAddVarTab[10+8*i] , &readVal); input2[i].max = (int16_t)readVal;
-      
-        printf("Limits Input1: TYP:%i MIN:%i MID:%i MAX:%i\r\nLimits Input2: TYP:%i MIN:%i MID:%i MAX:%i\r\n",
-          input1[i].typ, input1[i].min, input1[i].mid, input1[i].max,
-          input2[i].typ, input2[i].min, input2[i].mid, input2[i].max);
-      }
-    } else {
-      #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
-        printf("Using the configuration from config.h\r\n");
-      #endif
-
-      for (uint8_t i=0; i<INPUTS_NR; i++) {
-        if (input1[i].typDef == 3) {  // If Input type defined is 3 (auto), identify the input type based on the values from config.h
-          input1[i].typ = checkInputType(input1[i].min, input1[i].mid, input1[i].max);
-        } else {
-          input1[i].typ = input1[i].typDef;
-        }
-        if (input2[i].typDef == 3) {
-          input2[i].typ = checkInputType(input2[i].min, input2[i].mid, input2[i].max);
-        } else {
-          input2[i].typ = input2[i].typDef;
-        }
-        printf("Limits Input1: TYP:%i MIN:%i MID:%i MAX:%i\r\nLimits Input2: TYP:%i MIN:%i MID:%i MAX:%i\r\n",
-          input1[i].typ, input1[i].min, input1[i].mid, input1[i].max,
-          input2[i].typ, input2[i].min, input2[i].mid, input2[i].max);
-      }
-    }
-    HAL_FLASH_Lock();
-  #endif
-
-  #ifdef VARIANT_TRANSPOTTER
-    enable = 1;
-
-    HAL_FLASH_Unlock();
-    EE_Init();            /* EEPROM Init */
-    EE_ReadVariable(VirtAddVarTab[0], &saveValue);
-    HAL_FLASH_Lock();
-
-    setDistance = saveValue / 1000.0;
-    if (setDistance < 0.2) {
-      setDistance = 1.0;
-    }
-  #endif
-
-  #if defined(DEBUG_I2C_LCD) || defined(SUPPORT_LCD)
-    I2C_Init();
-    HAL_Delay(50);
-    lcd.pcf8574.PCF_I2C_ADDRESS = 0x27;
-    lcd.pcf8574.PCF_I2C_TIMEOUT = 5;
-    lcd.pcf8574.i2c             = hi2c2;
-    lcd.NUMBER_OF_LINES         = NUMBER_OF_LINES_2;
-    lcd.type                    = TYPE0;
-
-    if(LCD_Init(&lcd)!=LCD_OK) {
-        // error occured
-        //TODO while(1);
-    }
-
-    LCD_ClearDisplay(&lcd);
-    HAL_Delay(5);
-    LCD_SetLocation(&lcd, 0, 0);
-    #ifdef VARIANT_TRANSPOTTER
-      LCD_WriteString(&lcd, "TranspOtter V2.1");
-    #else
-      LCD_WriteString(&lcd, "Hover V2.0");
+  uint16_t writeCheck, readVal;
+  HAL_FLASH_Unlock();
+  EE_Init();            /* EEPROM Init */
+  EE_ReadVariable(VirtAddVarTab[0], &writeCheck);
+  if (writeCheck == FLASH_WRITE_KEY) {
+    #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
+      printf("Using the configuration from EEprom\r\n");
     #endif
-    LCD_SetLocation(&lcd,  0, 1); LCD_WriteString(&lcd, "Initializing...");
-  #endif
 
-  #if defined(VARIANT_TRANSPOTTER) && defined(SUPPORT_LCD)
-    LCD_ClearDisplay(&lcd);
-    HAL_Delay(5);
-    LCD_SetLocation(&lcd,  0, 1); LCD_WriteString(&lcd, "Bat:");
-    LCD_SetLocation(&lcd,  8, 1); LCD_WriteString(&lcd, "V");
-    LCD_SetLocation(&lcd, 15, 1); LCD_WriteString(&lcd, "A");
-    LCD_SetLocation(&lcd,  0, 0); LCD_WriteString(&lcd, "Len:");
-    LCD_SetLocation(&lcd,  8, 0); LCD_WriteString(&lcd, "m(");
-    LCD_SetLocation(&lcd, 14, 0); LCD_WriteString(&lcd, "m)");
-  #endif
+    EE_ReadVariable(VirtAddVarTab[1] , &readVal); rtP_Left.i_max = rtP_Right.i_max = (int16_t)readVal;
+    EE_ReadVariable(VirtAddVarTab[2] , &readVal); rtP_Left.n_max = rtP_Right.n_max = (int16_t)readVal;
+    for (uint8_t i=0; i<INPUTS_NR; i++) {
+      EE_ReadVariable(VirtAddVarTab[ 3+8*i] , &readVal); input1[i].typ = (uint8_t)readVal;
+      EE_ReadVariable(VirtAddVarTab[ 4+8*i] , &readVal); input1[i].min = (int16_t)readVal;
+      EE_ReadVariable(VirtAddVarTab[ 5+8*i] , &readVal); input1[i].mid = (int16_t)readVal;
+      EE_ReadVariable(VirtAddVarTab[ 6+8*i] , &readVal); input1[i].max = (int16_t)readVal;
+      EE_ReadVariable(VirtAddVarTab[ 7+8*i] , &readVal); input2[i].typ = (uint8_t)readVal;
+      EE_ReadVariable(VirtAddVarTab[ 8+8*i] , &readVal); input2[i].min = (int16_t)readVal;
+      EE_ReadVariable(VirtAddVarTab[ 9+8*i] , &readVal); input2[i].mid = (int16_t)readVal;
+      EE_ReadVariable(VirtAddVarTab[10+8*i] , &readVal); input2[i].max = (int16_t)readVal;
+    
+      printf("Limits Input1: TYP:%i MIN:%i MID:%i MAX:%i\r\nLimits Input2: TYP:%i MIN:%i MID:%i MAX:%i\r\n",
+        input1[i].typ, input1[i].min, input1[i].mid, input1[i].max,
+        input2[i].typ, input2[i].min, input2[i].mid, input2[i].max);
+    }
+  } else {
+    #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
+      printf("Using the configuration from config.h\r\n");
+    #endif
+
+    for (uint8_t i=0; i<INPUTS_NR; i++) {
+      if (input1[i].typDef == 3) {  // If Input type defined is 3 (auto), identify the input type based on the values from config.h
+        input1[i].typ = checkInputType(input1[i].min, input1[i].mid, input1[i].max);
+      } else {
+        input1[i].typ = input1[i].typDef;
+      }
+      if (input2[i].typDef == 3) {
+        input2[i].typ = checkInputType(input2[i].min, input2[i].mid, input2[i].max);
+      } else {
+        input2[i].typ = input2[i].typDef;
+      }
+      printf("Limits Input1: TYP:%i MIN:%i MID:%i MAX:%i\r\nLimits Input2: TYP:%i MIN:%i MID:%i MAX:%i\r\n",
+        input1[i].typ, input1[i].min, input1[i].mid, input1[i].max,
+        input2[i].typ, input2[i].min, input2[i].mid, input2[i].max);
+    }
+  }
+  HAL_FLASH_Lock();
 }
 
 /**
@@ -504,102 +428,99 @@ void adcCalibLim(void) {
     return;
   }
 
-#if !defined(VARIANT_HOVERBOARD) && !defined(VARIANT_TRANSPOTTER)
-
-  #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
-  printf("Input calibration started...\r\n");
-  #endif
-
-  readInputRaw();
-  // Inititalization: MIN = a high value, MAX = a low value
-  int32_t  input1_fixdt = input1[inIdx].raw << 16;
-  int32_t  input2_fixdt = input2[inIdx].raw << 16;
-  int16_t  INPUT1_MIN_temp = MAX_int16_T;
-  int16_t  INPUT1_MID_temp = 0;
-  int16_t  INPUT1_MAX_temp = MIN_int16_T;
-  int16_t  INPUT2_MIN_temp = MAX_int16_T;
-  int16_t  INPUT2_MID_temp = 0;
-  int16_t  INPUT2_MAX_temp = MIN_int16_T;
-  int16_t  input_margin    = 0;
-  uint16_t input_cal_timeout = 0;
-  
-  #ifdef CONTROL_ADC
-  if (inIdx == CONTROL_ADC) {
-    input_margin = ADC_MARGIN;
-  }
-  #endif
-
-  // Extract MIN, MAX and MID from ADC while the power button is not pressed
-  while (!HAL_GPIO_ReadPin(BUTTON_PORT, BUTTON_PIN) && input_cal_timeout++ < 4000) {   // 20 sec timeout
-    readInputRaw();
-    filtLowPass32(input1[inIdx].raw, FILTER, &input1_fixdt);
-    filtLowPass32(input2[inIdx].raw, FILTER, &input2_fixdt);
-    
-    INPUT1_MID_temp = (int16_t)(input1_fixdt >> 16);// CLAMP(input1_fixdt >> 16, INPUT1_MIN, INPUT1_MAX);   // convert fixed-point to integer
-    INPUT2_MID_temp = (int16_t)(input2_fixdt >> 16);// CLAMP(input2_fixdt >> 16, INPUT2_MIN, INPUT2_MAX);
-    INPUT1_MIN_temp = MIN(INPUT1_MIN_temp, INPUT1_MID_temp);
-    INPUT1_MAX_temp = MAX(INPUT1_MAX_temp, INPUT1_MID_temp);
-    INPUT2_MIN_temp = MIN(INPUT2_MIN_temp, INPUT2_MID_temp);
-    INPUT2_MAX_temp = MAX(INPUT2_MAX_temp, INPUT2_MID_temp);
-    HAL_Delay(5);
-  }
-
-  #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
-  printf("Input1 is ");
-  #endif
-  uint8_t input1TypTemp = checkInputType(INPUT1_MIN_temp, INPUT1_MID_temp, INPUT1_MAX_temp);
-  if (input1TypTemp == input1[inIdx].typDef || input1[inIdx].typDef == 3) {  // Accept calibration only if the type is correct OR type was set to 3 (auto)
-    #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
-    printf("..OK\r\n");
-    #endif
-  } else {
-    input1TypTemp = 0; // Disable input
-    #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
-    printf("..NOK\r\n");
-    #endif
-  }
-
-  #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
-  printf("Input2 is ");
-  #endif
-  uint8_t input2TypTemp = checkInputType(INPUT2_MIN_temp, INPUT2_MID_temp, INPUT2_MAX_temp);
-  if (input2TypTemp == input2[inIdx].typDef || input2[inIdx].typDef == 3) {  // Accept calibration only if the type is correct OR type was set to 3 (auto)
-    #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
-    printf("..OK\r\n");
-    #endif
-  } else {
-    input2TypTemp = 0; // Disable input
-    #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
-    printf("..NOK\r\n");
-    #endif
-  }
-
-
-  // At least one of the inputs is not ignored
-  if (input1TypTemp != 0 || input2TypTemp != 0){
-    input1[inIdx].typ = input1TypTemp;
-    input1[inIdx].min = INPUT1_MIN_temp + input_margin;
-    input1[inIdx].mid = INPUT1_MID_temp;
-    input1[inIdx].max = INPUT1_MAX_temp - input_margin;
-
-    input2[inIdx].typ = input2TypTemp;
-    input2[inIdx].min = INPUT2_MIN_temp + input_margin;
-    input2[inIdx].mid = INPUT2_MID_temp;
-    input2[inIdx].max = INPUT2_MAX_temp - input_margin;
-
-    inp_cal_valid = 1;    // Mark calibration to be saved in Flash at shutdown
-    #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
-    printf("Limits Input1: TYP:%i MIN:%i MID:%i MAX:%i\r\nLimits Input2: TYP:%i MIN:%i MID:%i MAX:%i\r\n",
-            input1[inIdx].typ, input1[inIdx].min, input1[inIdx].mid, input1[inIdx].max,
-            input2[inIdx].typ, input2[inIdx].min, input2[inIdx].mid, input2[inIdx].max);
-    #endif
-  }else{
-    #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
-    printf("Both inputs cannot be ignored, calibration rejected.\r\n");
-    #endif
-  }
-
+#if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
+printf("Input calibration started...\r\n");
 #endif
+
+readInputRaw();
+// Inititalization: MIN = a high value, MAX = a low value
+int32_t  input1_fixdt = input1[inIdx].raw << 16;
+int32_t  input2_fixdt = input2[inIdx].raw << 16;
+int16_t  INPUT1_MIN_temp = MAX_int16_T;
+int16_t  INPUT1_MID_temp = 0;
+int16_t  INPUT1_MAX_temp = MIN_int16_T;
+int16_t  INPUT2_MIN_temp = MAX_int16_T;
+int16_t  INPUT2_MID_temp = 0;
+int16_t  INPUT2_MAX_temp = MIN_int16_T;
+int16_t  input_margin    = 0;
+uint16_t input_cal_timeout = 0;
+
+#ifdef CONTROL_ADC
+if (inIdx == CONTROL_ADC) {
+  input_margin = ADC_MARGIN;
+}
+#endif
+
+// Extract MIN, MAX and MID from ADC while the power button is not pressed
+while (!HAL_GPIO_ReadPin(BUTTON_PORT, BUTTON_PIN) && input_cal_timeout++ < 4000) {   // 20 sec timeout
+  readInputRaw();
+  filtLowPass32(input1[inIdx].raw, FILTER, &input1_fixdt);
+  filtLowPass32(input2[inIdx].raw, FILTER, &input2_fixdt);
+  
+  INPUT1_MID_temp = (int16_t)(input1_fixdt >> 16);// CLAMP(input1_fixdt >> 16, INPUT1_MIN, INPUT1_MAX);   // convert fixed-point to integer
+  INPUT2_MID_temp = (int16_t)(input2_fixdt >> 16);// CLAMP(input2_fixdt >> 16, INPUT2_MIN, INPUT2_MAX);
+  INPUT1_MIN_temp = MIN(INPUT1_MIN_temp, INPUT1_MID_temp);
+  INPUT1_MAX_temp = MAX(INPUT1_MAX_temp, INPUT1_MID_temp);
+  INPUT2_MIN_temp = MIN(INPUT2_MIN_temp, INPUT2_MID_temp);
+  INPUT2_MAX_temp = MAX(INPUT2_MAX_temp, INPUT2_MID_temp);
+  HAL_Delay(5);
+}
+
+#if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
+printf("Input1 is ");
+#endif
+uint8_t input1TypTemp = checkInputType(INPUT1_MIN_temp, INPUT1_MID_temp, INPUT1_MAX_temp);
+if (input1TypTemp == input1[inIdx].typDef || input1[inIdx].typDef == 3) {  // Accept calibration only if the type is correct OR type was set to 3 (auto)
+  #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
+  printf("..OK\r\n");
+  #endif
+} else {
+  input1TypTemp = 0; // Disable input
+  #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
+  printf("..NOK\r\n");
+  #endif
+}
+
+#if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
+printf("Input2 is ");
+#endif
+uint8_t input2TypTemp = checkInputType(INPUT2_MIN_temp, INPUT2_MID_temp, INPUT2_MAX_temp);
+if (input2TypTemp == input2[inIdx].typDef || input2[inIdx].typDef == 3) {  // Accept calibration only if the type is correct OR type was set to 3 (auto)
+  #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
+  printf("..OK\r\n");
+  #endif
+} else {
+  input2TypTemp = 0; // Disable input
+  #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
+  printf("..NOK\r\n");
+  #endif
+}
+
+
+// At least one of the inputs is not ignored
+if (input1TypTemp != 0 || input2TypTemp != 0){
+  input1[inIdx].typ = input1TypTemp;
+  input1[inIdx].min = INPUT1_MIN_temp + input_margin;
+  input1[inIdx].mid = INPUT1_MID_temp;
+  input1[inIdx].max = INPUT1_MAX_temp - input_margin;
+
+  input2[inIdx].typ = input2TypTemp;
+  input2[inIdx].min = INPUT2_MIN_temp + input_margin;
+  input2[inIdx].mid = INPUT2_MID_temp;
+  input2[inIdx].max = INPUT2_MAX_temp - input_margin;
+
+  inp_cal_valid = 1;    // Mark calibration to be saved in Flash at shutdown
+  #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
+  printf("Limits Input1: TYP:%i MIN:%i MID:%i MAX:%i\r\nLimits Input2: TYP:%i MIN:%i MID:%i MAX:%i\r\n",
+          input1[inIdx].typ, input1[inIdx].min, input1[inIdx].mid, input1[inIdx].max,
+          input2[inIdx].typ, input2[inIdx].min, input2[inIdx].mid, input2[inIdx].max);
+  #endif
+}else{
+  #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
+  printf("Both inputs cannot be ignored, calibration rejected.\r\n");
+  #endif
+}
+
 #endif  // AUTO_CALIBRATION_ENA
 }
  /*
@@ -615,49 +536,46 @@ void updateCurSpdLim(void) {
     return;
   }
 
-#if !defined(VARIANT_HOVERBOARD) && !defined(VARIANT_TRANSPOTTER)
-
-  #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
-  printf("Torque and Speed limits update started...\r\n");
-  #endif
-
-  int32_t  input1_fixdt = input1[inIdx].raw << 16;
-  int32_t  input2_fixdt = input2[inIdx].raw << 16;
-  uint16_t cur_factor;    // fixdt(0,16,16)
-  uint16_t spd_factor;    // fixdt(0,16,16)
-  uint16_t cur_spd_timeout = 0;
-  cur_spd_valid = 0;
-
-  // Wait for the power button press
-  while (!HAL_GPIO_ReadPin(BUTTON_PORT, BUTTON_PIN) && cur_spd_timeout++ < 2000) {  // 10 sec timeout
-    readInputRaw();
-    filtLowPass32(input1[inIdx].raw, FILTER, &input1_fixdt);
-    filtLowPass32(input2[inIdx].raw, FILTER, &input2_fixdt);
-    HAL_Delay(5);
-  }
-  // Calculate scaling factors
-  cur_factor = CLAMP((input1_fixdt - (input1[inIdx].min << 16)) / (input1[inIdx].max - input1[inIdx].min), 6553, 65535);    // ADC1, MIN_cur(10%) = 1.5 A 
-  spd_factor = CLAMP((input2_fixdt - (input2[inIdx].min << 16)) / (input2[inIdx].max - input2[inIdx].min), 3276, 65535);    // ADC2, MIN_spd(5%)  = 50 rpm
-      
-  if (input1[inIdx].typ != 0){
-    // Update current limit
-    rtP_Left.i_max = rtP_Right.i_max  = (int16_t)((I_MOT_MAX * A2BIT_CONV * cur_factor) >> 12);    // fixdt(0,16,16) to fixdt(1,16,4)
-    cur_spd_valid   = 1;  // Mark update to be saved in Flash at shutdown
-  }
-
-  if (input2[inIdx].typ != 0){
-    // Update speed limit
-    rtP_Left.n_max = rtP_Right.n_max  = (int16_t)((N_MOT_MAX * spd_factor) >> 12);                 // fixdt(0,16,16) to fixdt(1,16,4)
-    cur_spd_valid  += 2;  // Mark update to be saved in Flash at shutdown
-  }
-
-  #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
-  // cur_spd_valid: 0 = No limit changed, 1 = Current limit changed, 2 = Speed limit changed, 3 = Both limits changed
-  printf("Limits (%i)\r\nCurrent: fixdt:%li factor%i i_max:%i \r\nSpeed: fixdt:%li factor:%i n_max:%i\r\n",
-          cur_spd_valid, input1_fixdt, cur_factor, rtP_Left.i_max, input2_fixdt, spd_factor, rtP_Left.n_max);
-  #endif
-
+#if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
+printf("Torque and Speed limits update started...\r\n");
 #endif
+
+int32_t  input1_fixdt = input1[inIdx].raw << 16;
+int32_t  input2_fixdt = input2[inIdx].raw << 16;
+uint16_t cur_factor;    // fixdt(0,16,16)
+uint16_t spd_factor;    // fixdt(0,16,16)
+uint16_t cur_spd_timeout = 0;
+cur_spd_valid = 0;
+
+// Wait for the power button press
+while (!HAL_GPIO_ReadPin(BUTTON_PORT, BUTTON_PIN) && cur_spd_timeout++ < 2000) {  // 10 sec timeout
+  readInputRaw();
+  filtLowPass32(input1[inIdx].raw, FILTER, &input1_fixdt);
+  filtLowPass32(input2[inIdx].raw, FILTER, &input2_fixdt);
+  HAL_Delay(5);
+}
+// Calculate scaling factors
+cur_factor = CLAMP((input1_fixdt - (input1[inIdx].min << 16)) / (input1[inIdx].max - input1[inIdx].min), 6553, 65535);    // ADC1, MIN_cur(10%) = 1.5 A 
+spd_factor = CLAMP((input2_fixdt - (input2[inIdx].min << 16)) / (input2[inIdx].max - input2[inIdx].min), 3276, 65535);    // ADC2, MIN_spd(5%)  = 50 rpm
+    
+if (input1[inIdx].typ != 0){
+  // Update current limit
+  rtP_Left.i_max = rtP_Right.i_max  = (int16_t)((I_MOT_MAX * A2BIT_CONV * cur_factor) >> 12);    // fixdt(0,16,16) to fixdt(1,16,4)
+  cur_spd_valid   = 1;  // Mark update to be saved in Flash at shutdown
+}
+
+if (input2[inIdx].typ != 0){
+  // Update speed limit
+  rtP_Left.n_max = rtP_Right.n_max  = (int16_t)((N_MOT_MAX * spd_factor) >> 12);                 // fixdt(0,16,16) to fixdt(1,16,4)
+  cur_spd_valid  += 2;  // Mark update to be saved in Flash at shutdown
+}
+
+#if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
+// cur_spd_valid: 0 = No limit changed, 1 = Current limit changed, 2 = Speed limit changed, 3 = Both limits changed
+printf("Limits (%i)\r\nCurrent: fixdt:%li factor%i i_max:%i \r\nSpeed: fixdt:%li factor:%i n_max:%i\r\n",
+        cur_spd_valid, input1_fixdt, cur_factor, rtP_Left.i_max, input2_fixdt, spd_factor, rtP_Left.n_max);
+#endif
+
 }
 
  /*
@@ -924,17 +842,6 @@ void readInputRaw(void) {
       input2[inIdx].raw = (pwm_captured_ch2_value - 500) * 2;
     }
     #endif
-
-    #ifdef VARIANT_TRANSPOTTER
-      #ifdef GAMETRAK_CONNECTION_NORMAL
-        input1[inIdx].cmd = adc_buffer.l_rx2;
-        input2[inIdx].cmd = adc_buffer.l_tx2;
-      #endif
-      #ifdef GAMETRAK_CONNECTION_ALTERNATE
-        input1[inIdx].cmd = adc_buffer.l_tx2;
-        input2[inIdx].cmd = adc_buffer.l_rx2;
-      #endif
-    #endif
 }
 
  /*
@@ -975,7 +882,7 @@ void handleTimeout(void) {
           inIdx = 1;                                    // Switch to Auxiliary input in case of NO Timeout on Auxiliary input
         #endif
       }
-      #if (defined(CONTROL_SERIAL_USART2) && CONTROL_SERIAL_USART2 == 0) || (defined(SIDEBOARD_SERIAL_USART2) && SIDEBOARD_SERIAL_USART2 == 0 && !defined(VARIANT_HOVERBOARD))
+      #if (defined(CONTROL_SERIAL_USART2) && CONTROL_SERIAL_USART2 == 0) || (defined(SIDEBOARD_SERIAL_USART2) && SIDEBOARD_SERIAL_USART2 == 0)
         timeoutFlgSerial = timeoutFlgSerial_L;          // Report Timeout only on the Primary Input
       #endif
     #endif
@@ -998,7 +905,7 @@ void handleTimeout(void) {
           inIdx = 1;                                    // Switch to Auxiliary input in case of NO Timeout on Auxiliary input
         #endif
       }
-      #if (defined(CONTROL_SERIAL_USART3) && CONTROL_SERIAL_USART3 == 0) || (defined(SIDEBOARD_SERIAL_USART3) && SIDEBOARD_SERIAL_USART3 == 0 && !defined(VARIANT_HOVERBOARD))
+      #if (defined(CONTROL_SERIAL_USART3) && CONTROL_SERIAL_USART3 == 0) || (defined(SIDEBOARD_SERIAL_USART3) && SIDEBOARD_SERIAL_USART3 == 0)
         timeoutFlgSerial = timeoutFlgSerial_R;          // Report Timeout only on the Primary Input
       #endif
     #endif
@@ -1007,10 +914,10 @@ void handleTimeout(void) {
       timeoutFlgSerial = timeoutFlgSerial_L || timeoutFlgSerial_R;
     #endif
 
-    #if defined(CONTROL_NUNCHUK) || defined(SUPPORT_NUNCHUK) || defined(VARIANT_TRANSPOTTER) || \
+    #if defined(CONTROL_NUNCHUK) || defined(SUPPORT_NUNCHUK) || \
         defined(CONTROL_PPM_LEFT) || defined(CONTROL_PPM_RIGHT) || defined(CONTROL_PWM_LEFT) || defined(CONTROL_PWM_RIGHT)
       if (timeoutCntGen++ >= TIMEOUT) {                 // Timeout qualification
-        #if defined(CONTROL_NUNCHUK) || defined(SUPPORT_NUNCHUK) || defined(VARIANT_TRANSPOTTER) || \
+        #if defined(CONTROL_NUNCHUK) || defined(SUPPORT_NUNCHUK) || \
             (defined(CONTROL_PPM_LEFT) && CONTROL_PPM_LEFT == 0) || (defined(CONTROL_PPM_RIGHT) && CONTROL_PPM_RIGHT == 0) || \
             (defined(CONTROL_PWM_LEFT) && CONTROL_PWM_LEFT == 0) || (defined(CONTROL_PWM_RIGHT) && CONTROL_PWM_RIGHT == 0)
           timeoutFlgGen = 1;                            // Report Timeout only on the Primary Input
@@ -1053,25 +960,10 @@ void handleTimeout(void) {
 void readCommand(void) {
     readInputRaw();
 
-    #if !defined(VARIANT_HOVERBOARD) && !defined(VARIANT_TRANSPOTTER)
-      calcInputCmd(&input1[inIdx], INPUT_MIN, INPUT_MAX);
-      #if !defined(VARIANT_SKATEBOARD)
-        calcInputCmd(&input2[inIdx], INPUT_MIN, INPUT_MAX);
-      #else
-        calcInputCmd(&input2[inIdx], INPUT_BRK, INPUT_MAX);
-      #endif
-    #endif
+    calcInputCmd(&input1[inIdx], INPUT_MIN, INPUT_MAX);
+    calcInputCmd(&input2[inIdx], INPUT_MIN, INPUT_MAX);
 
     handleTimeout();
-
-    #ifdef VARIANT_HOVERCAR
-    if (inIdx == CONTROL_ADC) {
-      brakePressed = (uint8_t)(input1[inIdx].cmd > 50);
-    }
-    else {
-      brakePressed = (uint8_t)(input2[inIdx].cmd < -50);
-    }
-    #endif
 
     #if defined(SUPPORT_BUTTONS_LEFT) || defined(SUPPORT_BUTTONS_RIGHT)
       button1 = !HAL_GPIO_ReadPin(BUTTON1_PORT, BUTTON1_PIN);
@@ -1346,17 +1238,6 @@ void sideboardLeds(uint8_t *leds) {
       *leds ^= LED5_SET;
     }
 
-    // Brake: use LED5 (upper Blue)
-    // brakePressed == 1, turn on led
-    // brakePressed == 0, turn off led
-    #ifdef VARIANT_HOVERCAR
-      if (brakePressed) {
-        *leds |= LED5_SET;
-      } else if (!brakePressed && !backwardDrive) {
-        *leds &= ~LED5_SET;
-      }
-    #endif
-
     // Battery Level Indicator: use LED1, LED2, LED3
     if (main_loop_counter % BAT_BLINK_INTERVAL == 0) {              //  | RED (LED1) | YELLOW (LED3) | GREEN (LED2) |
       if (batVoltage < BAT_DEAD) {                                  //  |     0      |       0       |      0       |
@@ -1402,7 +1283,7 @@ void sideboardLeds(uint8_t *leds) {
  * In non-hoverboard variants, the sensors are used as push buttons.
  */
 void sideboardSensors(uint8_t sensors) {
-  #if !defined(VARIANT_HOVERBOARD) && (defined(SIDEBOARD_SERIAL_USART2) || defined(SIDEBOARD_SERIAL_USART3))
+  #if (defined(SIDEBOARD_SERIAL_USART2) || defined(SIDEBOARD_SERIAL_USART3))
     static uint8_t sensor1_index;                                 // holds the press index number for sensor1, when used as a button
     static uint8_t sensor1_prev,  sensor2_prev;
     uint8_t sensor1_trig = 0, sensor2_trig = 0;
@@ -1505,36 +1386,27 @@ void sideboardSensors(uint8_t sensors) {
  * This function makes sure data is not lost after power-off
  */
 void saveConfig() {
-  #ifdef VARIANT_TRANSPOTTER
-    if (saveValue_valid) {
-      HAL_FLASH_Unlock();
-      EE_WriteVariable(VirtAddVarTab[0], saveValue);
-      HAL_FLASH_Lock();
-    }
-  #endif
-  #if !defined(VARIANT_HOVERBOARD) && !defined(VARIANT_TRANSPOTTER)
-    if (inp_cal_valid || cur_spd_valid) {
-      #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
-        printf("Saving configuration to EEprom\r\n");
-      #endif
+  if (inp_cal_valid || cur_spd_valid) {
+    #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
+      printf("Saving configuration to EEprom\r\n");
+    #endif
 
-      HAL_FLASH_Unlock();
-      EE_WriteVariable(VirtAddVarTab[0] , (uint16_t)FLASH_WRITE_KEY);
-      EE_WriteVariable(VirtAddVarTab[1] , (uint16_t)rtP_Left.i_max);
-      EE_WriteVariable(VirtAddVarTab[2] , (uint16_t)rtP_Left.n_max);
-      for (uint8_t i=0; i<INPUTS_NR; i++) {
-        EE_WriteVariable(VirtAddVarTab[ 3+8*i] , (uint16_t)input1[i].typ);
-        EE_WriteVariable(VirtAddVarTab[ 4+8*i] , (uint16_t)input1[i].min);
-        EE_WriteVariable(VirtAddVarTab[ 5+8*i] , (uint16_t)input1[i].mid);
-        EE_WriteVariable(VirtAddVarTab[ 6+8*i] , (uint16_t)input1[i].max);
-        EE_WriteVariable(VirtAddVarTab[ 7+8*i] , (uint16_t)input2[i].typ);
-        EE_WriteVariable(VirtAddVarTab[ 8+8*i] , (uint16_t)input2[i].min);
-        EE_WriteVariable(VirtAddVarTab[ 9+8*i] , (uint16_t)input2[i].mid);
-        EE_WriteVariable(VirtAddVarTab[10+8*i] , (uint16_t)input2[i].max);
-      }
-      HAL_FLASH_Lock();
+    HAL_FLASH_Unlock();
+    EE_WriteVariable(VirtAddVarTab[0] , (uint16_t)FLASH_WRITE_KEY);
+    EE_WriteVariable(VirtAddVarTab[1] , (uint16_t)rtP_Left.i_max);
+    EE_WriteVariable(VirtAddVarTab[2] , (uint16_t)rtP_Left.n_max);
+    for (uint8_t i=0; i<INPUTS_NR; i++) {
+      EE_WriteVariable(VirtAddVarTab[ 3+8*i] , (uint16_t)input1[i].typ);
+      EE_WriteVariable(VirtAddVarTab[ 4+8*i] , (uint16_t)input1[i].min);
+      EE_WriteVariable(VirtAddVarTab[ 5+8*i] , (uint16_t)input1[i].mid);
+      EE_WriteVariable(VirtAddVarTab[ 6+8*i] , (uint16_t)input1[i].max);
+      EE_WriteVariable(VirtAddVarTab[ 7+8*i] , (uint16_t)input2[i].typ);
+      EE_WriteVariable(VirtAddVarTab[ 8+8*i] , (uint16_t)input2[i].min);
+      EE_WriteVariable(VirtAddVarTab[ 9+8*i] , (uint16_t)input2[i].mid);
+      EE_WriteVariable(VirtAddVarTab[10+8*i] , (uint16_t)input2[i].max);
     }
-  #endif 
+    HAL_FLASH_Lock();
+  }
 }
 
 
@@ -1556,65 +1428,36 @@ void poweroff(void) {
 
 
 void poweroffPressCheck(void) {
-  #if !defined(VARIANT_HOVERBOARD) && !defined(VARIANT_TRANSPOTTER)
-    if(HAL_GPIO_ReadPin(BUTTON_PORT, BUTTON_PIN)) {
-      uint16_t cnt_press = 0;
-      while(HAL_GPIO_ReadPin(BUTTON_PORT, BUTTON_PIN)) {
-        HAL_Delay(10);
-        if (cnt_press++ == 5 * 100) { beepShort(5); }
-      }
-
-      if (cnt_press > 8) enable = 0;
-
-      if (cnt_press >= 5 * 100) {                         // Check if press is more than 5 sec
-        HAL_Delay(1000);
-        if (HAL_GPIO_ReadPin(BUTTON_PORT, BUTTON_PIN)) {  // Double press: Adjust Max Current, Max Speed
-          while(HAL_GPIO_ReadPin(BUTTON_PORT, BUTTON_PIN)) { HAL_Delay(10); }
-          beepLong(8);
-          updateCurSpdLim();
-          beepShort(5);
-        } else {                                          // Long press: Calibrate ADC Limits
-          #ifdef AUTO_CALIBRATION_ENA
-          beepLong(16); 
-          adcCalibLim();
-          beepShort(5);
-          #endif
-        }
-      } else if (cnt_press > 8) {                         // Short press: power off (80 ms debounce)
-        #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
-          printf("Powering off, button has been pressed\r\n");
-        #endif
-      poweroff();
-      }
+  if(HAL_GPIO_ReadPin(BUTTON_PORT, BUTTON_PIN)) {
+    uint16_t cnt_press = 0;
+    while(HAL_GPIO_ReadPin(BUTTON_PORT, BUTTON_PIN)) {
+      HAL_Delay(10);
+      if (cnt_press++ == 5 * 100) { beepShort(5); }
     }
-  #elif defined(VARIANT_TRANSPOTTER)
-    if(HAL_GPIO_ReadPin(BUTTON_PORT, BUTTON_PIN)) {
-      enable = 0;
-      while(HAL_GPIO_ReadPin(BUTTON_PORT, BUTTON_PIN)) { HAL_Delay(10); }
-      beepShort(5);
-      HAL_Delay(300);
-      if (HAL_GPIO_ReadPin(BUTTON_PORT, BUTTON_PIN)) {
+
+    if (cnt_press > 8) enable = 0;
+
+    if (cnt_press >= 5 * 100) {                         // Check if press is more than 5 sec
+      HAL_Delay(1000);
+      if (HAL_GPIO_ReadPin(BUTTON_PORT, BUTTON_PIN)) {  // Double press: Adjust Max Current, Max Speed
         while(HAL_GPIO_ReadPin(BUTTON_PORT, BUTTON_PIN)) { HAL_Delay(10); }
-        beepLong(5);
-        HAL_Delay(350);
-        poweroff();
-      } else {
-        setDistance += 0.25;
-        if (setDistance > 2.6) {
-          setDistance = 0.5;
-        }
-        beepShort(setDistance / 0.25);
-        saveValue = setDistance * 1000;
-        saveValue_valid = 1;
+        beepLong(8);
+        updateCurSpdLim();
+        beepShort(5);
+      } else {                                          // Long press: Calibrate ADC Limits
+        #ifdef AUTO_CALIBRATION_ENA
+        beepLong(16); 
+        adcCalibLim();
+        beepShort(5);
+        #endif
       }
+    } else if (cnt_press > 8) {                         // Short press: power off (80 ms debounce)
+      #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
+        printf("Powering off, button has been pressed\r\n");
+      #endif
+    poweroff();
     }
-  #else
-    if (HAL_GPIO_ReadPin(BUTTON_PORT, BUTTON_PIN)) {
-      enable = 0;                                             // disable motors
-      while (HAL_GPIO_ReadPin(BUTTON_PORT, BUTTON_PIN)) {}    // wait until button is released
-      poweroff();                                             // release power-latch
-    }
-  #endif
+  }
 }
 
 
