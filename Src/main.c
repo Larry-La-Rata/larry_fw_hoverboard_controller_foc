@@ -75,10 +75,10 @@ extern uint8_t enable;                  // global variable for motor enable
 
 extern int16_t batVoltage;              // global variable for battery voltage
 
-#if (defined(CONTROL_PPM_LEFT) && defined(DEBUG_SERIAL_USART3)) || (defined(CONTROL_PPM_RIGHT) && defined(DEBUG_SERIAL_USART2))
+#if defined(CONTROL_PPM_LEFT)
 extern volatile uint16_t ppm_captured_value[PPM_NUM_CHANNELS+1];
 #endif
-#if (defined(CONTROL_PWM_LEFT) && defined(DEBUG_SERIAL_USART3)) || (defined(CONTROL_PWM_RIGHT) && defined(DEBUG_SERIAL_USART2))
+#if defined(CONTROL_PWM_LEFT)
 extern volatile uint16_t pwm_captured_ch1_value;
 extern volatile uint16_t pwm_captured_ch2_value;
 #endif
@@ -101,7 +101,6 @@ int16_t cmdR;                    // global variable for Right Command
 //------------------------------------------------------------------------
 // Local variables
 //------------------------------------------------------------------------
-#if defined(FEEDBACK_SERIAL_USART2) || defined(FEEDBACK_SERIAL_USART3)
 typedef struct{
   uint16_t  start;
   int16_t   cmd1;
@@ -114,13 +113,7 @@ typedef struct{
   uint16_t  checksum;
 } SerialFeedback;
 static SerialFeedback Feedback;
-#endif
-#if defined(FEEDBACK_SERIAL_USART2)
 static uint8_t sideboard_leds_L;
-#endif
-#if defined(FEEDBACK_SERIAL_USART3)
-static uint8_t sideboard_leds_R;
-#endif
 
 static int16_t     speed;                // local variable for speed. -1000 to 1000
 static int16_t     steer;                // local variable for steering. -1000 to 1000
@@ -192,9 +185,7 @@ int main(void) {
       beepShort(4); HAL_Delay(100);
       steerFixdt = speedFixdt = 0;      // reset filters
       enable = 1;                       // enable motors
-      #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
       printf("-- Motors enabled --\r\n");
-      #endif
     }
 
     #ifdef STANDSTILL_HOLD_ENABLE
@@ -241,69 +232,50 @@ int main(void) {
     dc_curr       = left_dc_curr + right_dc_curr;            // Total DC Link Current * 100
 
     // ####### DEBUG SERIAL OUT #######
-    #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
-      if (main_loop_counter % 25 == 0) {    // Send data periodically every 125 ms      
-        #if defined(DEBUG_SERIAL_PROTOCOL)
-          process_debug();
-        #else
-          printf("in1:%i in2:%i cmdL:%i cmdR:%i BatADC:%i BatV:%i TempADC:%i Temp:%i \r\n",
-            input1[inIdx].raw,        // 1: INPUT1
-            input2[inIdx].raw,        // 2: INPUT2
-            cmdL,                     // 3: output command: [-1000, 1000]
-            cmdR,                     // 4: output command: [-1000, 1000]
-            adc_buffer.batt1,         // 5: for battery voltage calibration
-            batVoltageCalib,          // 6: for verifying battery voltage calibration
-            board_temp_adcFilt,       // 7: for board temperature calibration
-            board_temp_deg_c);        // 8: for verifying board temperature calibration
-        #endif
-      }
-    #endif
+    if (main_loop_counter % 25 == 0) {    // Send data periodically every 125 ms      
+      #if defined(DEBUG_SERIAL_PROTOCOL)
+        process_debug();
+      #else
+        printf("in1:%i in2:%i cmdL:%i cmdR:%i BatADC:%i BatV:%i TempADC:%i Temp:%i \r\n",
+          input1[inIdx].raw,        // 1: INPUT1
+          input2[inIdx].raw,        // 2: INPUT2
+          cmdL,                     // 3: output command: [-1000, 1000]
+          cmdR,                     // 4: output command: [-1000, 1000]
+          adc_buffer.batt1,         // 5: for battery voltage calibration
+          batVoltageCalib,          // 6: for verifying battery voltage calibration
+          board_temp_adcFilt,       // 7: for board temperature calibration
+          board_temp_deg_c);        // 8: for verifying board temperature calibration
+      #endif
+    }
 
     // ####### FEEDBACK SERIAL OUT #######
-    #if defined(FEEDBACK_SERIAL_USART2) || defined(FEEDBACK_SERIAL_USART3)
-      if (main_loop_counter % 2 == 0) {    // Send data periodically every 10 ms
-        Feedback.start	        = (uint16_t)SERIAL_START_FRAME;
-        Feedback.cmd1           = (int16_t)input1[inIdx].cmd;
-        Feedback.cmd2           = (int16_t)input2[inIdx].cmd;
-        Feedback.speedR_meas	  = (int16_t)rtY_Right.n_mot;
-        Feedback.speedL_meas	  = (int16_t)rtY_Left.n_mot;
-        Feedback.batVoltage	    = (int16_t)batVoltageCalib;
-        Feedback.boardTemp	    = (int16_t)board_temp_deg_c;
+    if (main_loop_counter % 2 == 0) {    // Send data periodically every 10 ms
+      Feedback.start	        = (uint16_t)SERIAL_START_FRAME;
+      Feedback.cmd1           = (int16_t)input1[inIdx].cmd;
+      Feedback.cmd2           = (int16_t)input2[inIdx].cmd;
+      Feedback.speedR_meas	  = (int16_t)rtY_Right.n_mot;
+      Feedback.speedL_meas	  = (int16_t)rtY_Left.n_mot;
+      Feedback.batVoltage	    = (int16_t)batVoltageCalib;
+      Feedback.boardTemp	    = (int16_t)board_temp_deg_c;
 
-        #if defined(FEEDBACK_SERIAL_USART2)
-          if(__HAL_DMA_GET_COUNTER(huart2.hdmatx) == 0) {
-            Feedback.cmdLed     = (uint16_t)sideboard_leds_L;
-            Feedback.checksum   = (uint16_t)(Feedback.start ^ Feedback.cmd1 ^ Feedback.cmd2 ^ Feedback.speedR_meas ^ Feedback.speedL_meas 
-                                           ^ Feedback.batVoltage ^ Feedback.boardTemp ^ Feedback.cmdLed);
+      if(__HAL_DMA_GET_COUNTER(huart2.hdmatx) == 0) {
+        Feedback.cmdLed     = (uint16_t)sideboard_leds_L;
+        Feedback.checksum   = (uint16_t)(Feedback.start ^ Feedback.cmd1 ^ Feedback.cmd2 ^ Feedback.speedR_meas ^ Feedback.speedL_meas 
+                                        ^ Feedback.batVoltage ^ Feedback.boardTemp ^ Feedback.cmdLed);
 
-            HAL_UART_Transmit_DMA(&huart2, (uint8_t *)&Feedback, sizeof(Feedback));
-          }
-        #endif
-        #if defined(FEEDBACK_SERIAL_USART3)
-          if(__HAL_DMA_GET_COUNTER(huart3.hdmatx) == 0) {
-            Feedback.cmdLed     = (uint16_t)sideboard_leds_R;
-            Feedback.checksum   = (uint16_t)(Feedback.start ^ Feedback.cmd1 ^ Feedback.cmd2 ^ Feedback.speedR_meas ^ Feedback.speedL_meas 
-                                           ^ Feedback.batVoltage ^ Feedback.boardTemp ^ Feedback.cmdLed);
-
-            HAL_UART_Transmit_DMA(&huart3, (uint8_t *)&Feedback, sizeof(Feedback));
-          }
-        #endif
+        HAL_UART_Transmit_DMA(&huart2, (uint8_t *)&Feedback, sizeof(Feedback));
       }
-    #endif
+    }
 
     // ####### POWEROFF BY POWER-BUTTON #######
     // poweroffPressCheck();
 
     // ####### BEEP AND EMERGENCY POWEROFF #######
     if (TEMP_POWEROFF_ENABLE && board_temp_deg_c >= TEMP_POWEROFF && speedAvgAbs < 20){  // poweroff before mainboard burns OR low bat 3
-      #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
-        printf("Powering off, temperature is too high\r\n");
-      #endif
+      printf("Powering off, temperature is too high\r\n");
       poweroff();
     } else if ( BAT_DEAD_ENABLE && batVoltage < BAT_DEAD && speedAvgAbs < 20){
-      #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
-        printf("Powering off, battery voltage is too low\r\n");
-      #endif
+      printf("Powering off, battery voltage is too low\r\n");
       poweroff();
     } else if (rtY_Left.z_errCode || rtY_Right.z_errCode) {                                           // 1 beep (low pitch): Motor error, disable motors
       enable = 0;
@@ -344,9 +316,7 @@ int main(void) {
     #endif
 
     if (inactivity_timeout_counter > (INACTIVITY_TIMEOUT * 60 * 1000) / (DELAY_IN_MAIN_LOOP + 1)) {  // rest of main loop needs maybe 1ms
-      #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
-        printf("Powering off, wheels were inactive for too long\r\n");
-      #endif
+      printf("Powering off, wheels were inactive for too long\r\n");
       poweroff();
     }
 

@@ -115,37 +115,17 @@ static int16_t INPUT_MIN;             // [-] Input target minimum limitation
 static uint8_t  cur_spd_valid  = 0;
 static uint8_t  inp_cal_valid  = 0;
 
-#if defined(DEBUG_SERIAL_USART2) || defined(CONTROL_SERIAL_USART2)
 static uint8_t  rx_buffer_L[SERIAL_BUFFER_SIZE];      // USART Rx DMA circular buffer
 static uint32_t rx_buffer_L_len = ARRAY_LEN(rx_buffer_L);
-#endif
-#if defined(CONTROL_SERIAL_USART2)
 static uint16_t timeoutCntSerial_L = SERIAL_TIMEOUT;  // Timeout counter for Rx Serial command
 static uint8_t  timeoutFlgSerial_L = 0;               // Timeout Flag for Rx Serial command: 0 = OK, 1 = Problem detected (line disconnected or wrong Rx data)
-#endif
 
-#if defined(DEBUG_SERIAL_USART3) || defined(CONTROL_SERIAL_USART3)
 static uint8_t  rx_buffer_R[SERIAL_BUFFER_SIZE];      // USART Rx DMA circular buffer
 static uint32_t rx_buffer_R_len = ARRAY_LEN(rx_buffer_R);
-#endif
 
-#if defined(CONTROL_SERIAL_USART2)
 static SerialCommand commandL;
 static SerialCommand commandL_raw;
 static uint32_t commandL_len = sizeof(commandL);
-  #ifdef CONTROL_IBUS
-  static uint16_t ibusL_captured_value[IBUS_NUM_CHANNELS];
-  #endif
-#endif
-
-#if defined(CONTROL_SERIAL_USART3)
-static SerialCommand commandR;
-static SerialCommand commandR_raw;
-static uint32_t commandR_len = sizeof(commandR);
-  #ifdef CONTROL_IBUS
-  static uint16_t ibusR_captured_value[IBUS_NUM_CHANNELS];
-  #endif
-#endif
 
 #if defined(STANDSTILL_HOLD_ENABLE) && (CTRL_TYP_SEL == FOC_CTRL) && (CTRL_MOD_REQ != SPD_MODE)
 static uint8_t cruiseCtrlAcv = 0;
@@ -154,28 +134,22 @@ static uint8_t standstillAcv = 0;
 
 /* =========================== Retargeting printf =========================== */
 /* retarget the C library printf function to the USART */
-#if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
-  #ifdef __GNUC__
-    #define PUTCHAR_PROTOTYPE int __io_putchar(int ch)
-  #else
-    #define PUTCHAR_PROTOTYPE int fputc(int ch, FILE *f)
-  #endif
-  PUTCHAR_PROTOTYPE {
-    #if defined(DEBUG_SERIAL_USART2)
-      HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, 1000);
-    #elif defined(DEBUG_SERIAL_USART3)
-      HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 1, 1000);
-    #endif
-    return ch;
+#ifdef __GNUC__
+  #define PUTCHAR_PROTOTYPE int __io_putchar(int ch)
+#else
+  #define PUTCHAR_PROTOTYPE int fputc(int ch, FILE *f)
+#endif
+PUTCHAR_PROTOTYPE {
+  HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 1, 1000);
+  return ch;
+}
+
+#ifdef __GNUC__
+  int _write(int file, char *data, int len) {
+    int i;
+    for (i = 0; i < len; i++) { __io_putchar( *data++ );}
+    return len;
   }
-  
-  #ifdef __GNUC__
-    int _write(int file, char *data, int len) {
-      int i;
-      for (i = 0; i < len; i++) { __io_putchar( *data++ );}
-      return len;
-    }
-  #endif
 #endif
 
  
@@ -234,29 +208,19 @@ void Input_Init(void) {
     PWM_Init();
   #endif
 
-  #if defined(DEBUG_SERIAL_USART2) || defined(CONTROL_SERIAL_USART2) || defined(FEEDBACK_SERIAL_USART2)
-    UART2_Init();
-  #endif
-  #if defined(DEBUG_SERIAL_USART3) || defined(CONTROL_SERIAL_USART3) || defined(FEEDBACK_SERIAL_USART3)
-    UART3_Init();
-  #endif
-  #if defined(DEBUG_SERIAL_USART2) || defined(CONTROL_SERIAL_USART2)
-    HAL_UART_Receive_DMA(&huart2, (uint8_t *)rx_buffer_L, sizeof(rx_buffer_L));
-    UART_DisableRxErrors(&huart2);
-  #endif
-  #if defined(DEBUG_SERIAL_USART3) || defined(CONTROL_SERIAL_USART3)
-    HAL_UART_Receive_DMA(&huart3, (uint8_t *)rx_buffer_R, sizeof(rx_buffer_R));
-    UART_DisableRxErrors(&huart3);
-  #endif
+  UART2_Init();
+  UART3_Init();
+  HAL_UART_Receive_DMA(&huart2, (uint8_t *)rx_buffer_L, sizeof(rx_buffer_L));
+  UART_DisableRxErrors(&huart2);
+  HAL_UART_Receive_DMA(&huart3, (uint8_t *)rx_buffer_R, sizeof(rx_buffer_R));
+  UART_DisableRxErrors(&huart3);
 
   uint16_t writeCheck, readVal;
   HAL_FLASH_Unlock();
   EE_Init();            /* EEPROM Init */
   EE_ReadVariable(VirtAddVarTab[0], &writeCheck);
   if (writeCheck == FLASH_WRITE_KEY) {
-    #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
-      printf("Using the configuration from EEprom\r\n");
-    #endif
+    printf("Using the configuration from EEprom\r\n");
 
     EE_ReadVariable(VirtAddVarTab[1] , &readVal); rtP_Left.i_max = rtP_Right.i_max = (int16_t)readVal;
     EE_ReadVariable(VirtAddVarTab[2] , &readVal); rtP_Left.n_max = rtP_Right.n_max = (int16_t)readVal;
@@ -275,9 +239,7 @@ void Input_Init(void) {
         input2[i].typ, input2[i].min, input2[i].mid, input2[i].max);
     }
   } else {
-    #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
-      printf("Using the configuration from config.h\r\n");
-    #endif
+    printf("Using the configuration from config.h\r\n");
 
     for (uint8_t i=0; i<INPUTS_NR; i++) {
       if (input1[i].typDef == 3) {  // If Input type defined is 3 (auto), identify the input type based on the values from config.h
@@ -304,15 +266,11 @@ void Input_Init(void) {
   * @param  huart: UART handle.
   * @retval None
   */
-#if defined(DEBUG_SERIAL_USART2) || defined(CONTROL_SERIAL_USART2) || \
-    defined(DEBUG_SERIAL_USART3) || defined(CONTROL_SERIAL_USART3)
 void UART_DisableRxErrors(UART_HandleTypeDef *huart)
 {  
   CLEAR_BIT(huart->Instance->CR1, USART_CR1_PEIE);    /* Disable PE (Parity Error) interrupts */  
   CLEAR_BIT(huart->Instance->CR3, USART_CR3_EIE);     /* Disable EIE (Frame error, noise error, overrun error) interrupts */
 }
-#endif
-
 
 /* =========================== General Functions =========================== */
 
@@ -404,9 +362,7 @@ void adcCalibLim(void) {
     return;
   }
 
-#if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
 printf("Input calibration started...\r\n");
-#endif
 
 readInputRaw();
 // Inititalization: MIN = a high value, MAX = a low value
@@ -436,36 +392,23 @@ while (!HAL_GPIO_ReadPin(BUTTON_PORT, BUTTON_PIN) && input_cal_timeout++ < 4000)
   HAL_Delay(5);
 }
 
-#if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
 printf("Input1 is ");
-#endif
 uint8_t input1TypTemp = checkInputType(INPUT1_MIN_temp, INPUT1_MID_temp, INPUT1_MAX_temp);
 if (input1TypTemp == input1[inIdx].typDef || input1[inIdx].typDef == 3) {  // Accept calibration only if the type is correct OR type was set to 3 (auto)
-  #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
   printf("..OK\r\n");
-  #endif
 } else {
   input1TypTemp = 0; // Disable input
-  #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
   printf("..NOK\r\n");
-  #endif
 }
 
-#if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
 printf("Input2 is ");
-#endif
 uint8_t input2TypTemp = checkInputType(INPUT2_MIN_temp, INPUT2_MID_temp, INPUT2_MAX_temp);
 if (input2TypTemp == input2[inIdx].typDef || input2[inIdx].typDef == 3) {  // Accept calibration only if the type is correct OR type was set to 3 (auto)
-  #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
   printf("..OK\r\n");
-  #endif
 } else {
   input2TypTemp = 0; // Disable input
-  #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
   printf("..NOK\r\n");
-  #endif
 }
-
 
 // At least one of the inputs is not ignored
 if (input1TypTemp != 0 || input2TypTemp != 0){
@@ -480,15 +423,11 @@ if (input1TypTemp != 0 || input2TypTemp != 0){
   input2[inIdx].max = INPUT2_MAX_temp - input_margin;
 
   inp_cal_valid = 1;    // Mark calibration to be saved in Flash at shutdown
-  #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
   printf("Limits Input1: TYP:%i MIN:%i MID:%i MAX:%i\r\nLimits Input2: TYP:%i MIN:%i MID:%i MAX:%i\r\n",
           input1[inIdx].typ, input1[inIdx].min, input1[inIdx].mid, input1[inIdx].max,
           input2[inIdx].typ, input2[inIdx].min, input2[inIdx].mid, input2[inIdx].max);
-  #endif
 }else{
-  #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
   printf("Both inputs cannot be ignored, calibration rejected.\r\n");
-  #endif
 }
 
 #endif  // AUTO_CALIBRATION_ENA
@@ -506,9 +445,7 @@ void updateCurSpdLim(void) {
     return;
   }
 
-#if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
 printf("Torque and Speed limits update started...\r\n");
-#endif
 
 int32_t  input1_fixdt = input1[inIdx].raw << 16;
 int32_t  input2_fixdt = input2[inIdx].raw << 16;
@@ -540,11 +477,9 @@ if (input2[inIdx].typ != 0){
   cur_spd_valid  += 2;  // Mark update to be saved in Flash at shutdown
 }
 
-#if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
 // cur_spd_valid: 0 = No limit changed, 1 = Current limit changed, 2 = Speed limit changed, 3 = Both limits changed
 printf("Limits (%i)\r\nCurrent: fixdt:%li factor%i i_max:%i \r\nSpeed: fixdt:%li factor:%i n_max:%i\r\n",
         cur_spd_valid, input1_fixdt, cur_factor, rtP_Left.i_max, input2_fixdt, spd_factor, rtP_Left.n_max);
-#endif
 
 }
 
@@ -626,20 +561,14 @@ int checkInputType(int16_t min, int16_t mid, int16_t max){
 
   if ((min / threshold) == (max / threshold) || (mid / threshold) == (max / threshold) || min > max || mid > max) {
     type = 0;
-    #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
     printf("ignored");                // (MIN and MAX) OR (MID and MAX) are close, disable input
-    #endif
   } else {
     if ((min / threshold) == (mid / threshold)){
       type = 1;
-      #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
       printf("a normal pot");        // MIN and MID are close, it's a normal pot
-      #endif
     } else {
       type = 2;
-      #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
       printf("a mid-resting pot");   // it's a mid resting pot
-      #endif
     }
   }
 
@@ -678,18 +607,10 @@ void calcInputCmd(InputStruct *in, int16_t out_min, int16_t out_max) {
  * Function to read the Input Raw values from various input devices
  */
 void readInputRaw(void) {
-    if (inIdx == CONTROL_SERIAL_USART2) {
-      #ifdef CONTROL_IBUS
-        for (uint8_t i = 0; i < (IBUS_NUM_CHANNELS * 2); i+=2) {
-          ibusL_captured_value[(i/2)] = CLAMP(commandL.channels[i] + (commandL.channels[i+1] << 8) - 1000, 0, INPUT_MAX); // 1000-2000 -> 0-1000
-        }
-        input1[inIdx].raw = (ibusL_captured_value[0] - 500) * 2;
-        input2[inIdx].raw = (ibusL_captured_value[1] - 500) * 2; 
-      #else
-        input1[inIdx].raw = commandL.steer;
-        input2[inIdx].raw = commandL.speed;
-      #endif
-    }
+  if (inIdx == 0) { // CONTROL_SERIAL_USART2 was 0
+    input1[inIdx].raw = commandL.steer;
+    input2[inIdx].raw = commandL.speed;
+  }
 }
 
  /*
@@ -697,17 +618,13 @@ void readInputRaw(void) {
  */
 void handleTimeout(void) {
 
-    #if defined(CONTROL_SERIAL_USART2)
-      if (timeoutCntSerial_L++ >= SERIAL_TIMEOUT) {     // Timeout qualification
-        timeoutFlgSerial_L = 1;                         // Timeout detected
-        timeoutCntSerial_L = SERIAL_TIMEOUT;            // Limit timout counter value
-      } else {                                          // No Timeout
+    if (timeoutCntSerial_L++ >= SERIAL_TIMEOUT) {     // Timeout qualification
+      timeoutFlgSerial_L = 1;                         // Timeout detected
+      timeoutCntSerial_L = SERIAL_TIMEOUT;            // Limit timout counter value
+    } else {                                          // No Timeout
 
-      }
-      #if (defined(CONTROL_SERIAL_USART2) && CONTROL_SERIAL_USART2 == 0)
-        timeoutFlgSerial = timeoutFlgSerial_L;          // Report Timeout only on the Primary Input
-      #endif
-    #endif
+    }
+    timeoutFlgSerial = timeoutFlgSerial_L;          // Report Timeout only on the Primary Input
 
     // In case of timeout bring the system to a Safe State
     if (timeoutFlgADC || timeoutFlgSerial || timeoutFlgGen) {
@@ -748,28 +665,10 @@ void readCommand(void) {
  */
 void usart2_rx_check(void)
 {
-  #if defined(DEBUG_SERIAL_USART2) || defined(CONTROL_SERIAL_USART2)
   static uint32_t old_pos;
   uint32_t pos;
   pos = rx_buffer_L_len - __HAL_DMA_GET_COUNTER(huart2.hdmarx);         // Calculate current position in buffer
-  #endif
 
-  #if defined(DEBUG_SERIAL_USART2)
-  uint8_t ptr_debug[SERIAL_BUFFER_SIZE];
-  if (pos != old_pos) {                                                 // Check change in received data
-    if (pos > old_pos) {                                                // "Linear" buffer mode: check if current position is over previous one
-      usart_process_debug(&rx_buffer_L[old_pos], pos - old_pos);        // Process data
-    } else {                                                            // "Overflow" buffer mode
-      memcpy(&ptr_debug[0], &rx_buffer_L[old_pos], rx_buffer_L_len - old_pos);    // First copy data from the end of buffer
-      if (pos > 0) {                                                    // Check and continue with beginning of buffer
-        memcpy(&ptr_debug[rx_buffer_L_len - old_pos], &rx_buffer_L[0], pos);                              // Copy remaining data
-      }
-      usart_process_debug(ptr_debug, rx_buffer_L_len - old_pos + pos);        // Process data
-    }
-  }
-  #endif // DEBUG_SERIAL_USART2
-
-  #ifdef CONTROL_SERIAL_USART2
   uint8_t *ptr;	
   if (pos != old_pos) {                                                 // Check change in received data
     ptr = (uint8_t *)&commandL_raw;                                     // Initialize the pointer with command_raw address
@@ -785,14 +684,11 @@ void usart2_rx_check(void)
       usart_process_command(&commandL_raw, &commandL, 2);               // Process data
     }
   }
-  #endif // CONTROL_SERIAL_USART2
 
-  #if defined(DEBUG_SERIAL_USART2) || defined(CONTROL_SERIAL_USART2)
   old_pos = pos;                                                        // Update old position
   if (old_pos == rx_buffer_L_len) {                                     // Check and manually update if we reached end of buffer
     old_pos = 0;
   }
-	#endif
 }
 
 
@@ -802,13 +698,10 @@ void usart2_rx_check(void)
  */
 void usart3_rx_check(void)
 {
-  #if defined(DEBUG_SERIAL_USART3) || defined(CONTROL_SERIAL_USART3)
   static uint32_t old_pos;
   uint32_t pos;  
   pos = rx_buffer_R_len - __HAL_DMA_GET_COUNTER(huart3.hdmarx);         // Calculate current position in buffer
-  #endif
 
-  #if defined(DEBUG_SERIAL_USART3)
   uint8_t ptr_debug[SERIAL_BUFFER_SIZE];
 
   if (pos != old_pos) {                                                 // Check change in received data
@@ -822,20 +715,16 @@ void usart3_rx_check(void)
       usart_process_debug(ptr_debug, rx_buffer_R_len - old_pos + pos);        // Process data
     }
   }
-  #endif // DEBUG_SERIAL_USART3
 
-  #if defined(DEBUG_SERIAL_USART3) || defined(CONTROL_SERIAL_USART3)
   old_pos = pos;                                                        // Update old position
   if (old_pos == rx_buffer_R_len) {                                     // Check and manually update if we reached end of buffer
     old_pos = 0;
   }
-  #endif
 }
 
 /*
  * Process Rx debug user command input
  */
-#if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
 void usart_process_debug(uint8_t *userCommand, uint32_t len)
 {
   #ifdef DEBUG_SERIAL_PROTOCOL
@@ -843,59 +732,24 @@ void usart_process_debug(uint8_t *userCommand, uint32_t len)
   #endif
 }
 
-#endif // SERIAL_DEBUG
-
 /*
  * Process command Rx data
  * - if the command_in data is valid (correct START_FRAME and checksum) copy the command_in to command_out
  */
-#if defined(CONTROL_SERIAL_USART2) || defined(CONTROL_SERIAL_USART3)
 void usart_process_command(SerialCommand *command_in, SerialCommand *command_out, uint8_t usart_idx)
 {
-  #ifdef CONTROL_IBUS
-    uint16_t ibus_chksum;
-    if (command_in->start == IBUS_LENGTH && command_in->type == IBUS_COMMAND) {
-      ibus_chksum = 0xFFFF - IBUS_LENGTH - IBUS_COMMAND;
-      for (uint8_t i = 0; i < (IBUS_NUM_CHANNELS * 2); i++) {
-        ibus_chksum -= command_in->channels[i];
-      }
-      if (ibus_chksum == (uint16_t)((command_in->checksumh << 8) + command_in->checksuml)) {
-        *command_out = *command_in;
-        if (usart_idx == 2) {             // Sideboard USART2
-          #ifdef CONTROL_SERIAL_USART2
-          timeoutFlgSerial_L = 0;         // Clear timeout flag
-          timeoutCntSerial_L = 0;         // Reset timeout counter
-          #endif
-        } else if (usart_idx == 3) {      // Sideboard USART3
-          #ifdef CONTROL_SERIAL_USART3
-          timeoutFlgSerial_R = 0;         // Clear timeout flag
-          timeoutCntSerial_R = 0;         // Reset timeout counter
-          #endif
-        }
-      }
-    }
-  #else
   uint16_t checksum;
   if (command_in->start == SERIAL_START_FRAME) {
     checksum = (uint16_t)(command_in->start ^ command_in->steer ^ command_in->speed);
     if (command_in->checksum == checksum) {
       *command_out = *command_in;
       if (usart_idx == 2) {             // Sideboard USART2
-        #ifdef CONTROL_SERIAL_USART2
         timeoutFlgSerial_L = 0;         // Clear timeout flag
         timeoutCntSerial_L = 0;         // Reset timeout counter
-        #endif
-      } else if (usart_idx == 3) {      // Sideboard USART3
-        #ifdef CONTROL_SERIAL_USART3
-        timeoutFlgSerial_R = 0;         // Clear timeout flag
-        timeoutCntSerial_R = 0;         // Reset timeout counter
-        #endif
       }
     }
   }
-  #endif
 }
-#endif
 
 /* =========================== Poweroff Functions =========================== */
 
@@ -905,10 +759,7 @@ void usart_process_command(SerialCommand *command_in, SerialCommand *command_out
  */
 void saveConfig() {
   if (inp_cal_valid || cur_spd_valid) {
-    #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
-      printf("Saving configuration to EEprom\r\n");
-    #endif
-
+    printf("Saving configuration to EEprom\r\n");
     HAL_FLASH_Unlock();
     EE_WriteVariable(VirtAddVarTab[0] , (uint16_t)FLASH_WRITE_KEY);
     EE_WriteVariable(VirtAddVarTab[1] , (uint16_t)rtP_Left.i_max);
@@ -930,9 +781,7 @@ void saveConfig() {
 
 void poweroff(void) {
   enable = 0;
-  #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
   printf("-- Motors disabled --\r\n");
-  #endif
   buzzerCount = 0;  // prevent interraction with beep counter
   buzzerPattern = 0;
   for (int i = 0; i < 8; i++) {
@@ -970,10 +819,8 @@ void poweroffPressCheck(void) {
         #endif
       }
     } else if (cnt_press > 8) {                         // Short press: power off (80 ms debounce)
-      #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
-        printf("Powering off, button has been pressed\r\n");
-      #endif
-    poweroff();
+      printf("Powering off, button has been pressed\r\n");
+      poweroff();
     }
   }
 }

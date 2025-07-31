@@ -276,7 +276,6 @@ void EXTI15_10_IRQHandler(void)
 }
 #endif
 
-#if defined(DEBUG_SERIAL_USART2) || defined(CONTROL_SERIAL_USART2) || defined(FEEDBACK_SERIAL_USART2)
 void DMA1_Channel6_IRQHandler(void)
 {
   /* USER CODE BEGIN DMA1_Channel4_IRQn 0 */
@@ -301,9 +300,7 @@ void DMA1_Channel7_IRQHandler(void)
 
   /* USER CODE END DMA1_Channel5_IRQn 1 */
 }
-#endif
 
-#if defined(DEBUG_SERIAL_USART3) || defined(CONTROL_SERIAL_USART3) || defined(FEEDBACK_SERIAL_USART3)
 /**
   * @brief This function handles DMA1 channel2 global interrupt.
   */
@@ -331,9 +328,7 @@ void DMA1_Channel3_IRQHandler(void)
 
   /* USER CODE END DMA1_Channel3_IRQn 1 */
 }
-#endif
 
-#if defined(DEBUG_SERIAL_USART2) || defined(CONTROL_SERIAL_USART2) || defined(FEEDBACK_SERIAL_USART2)
 /**
   * @brief This function handles USART2 global interrupt.
   */
@@ -350,9 +345,7 @@ void USART2_IRQHandler(void)
   }
   /* USER CODE END USART2_IRQn 1 */
 }
-#endif
 
-#if defined(DEBUG_SERIAL_USART3) || defined(CONTROL_SERIAL_USART3) || defined(FEEDBACK_SERIAL_USART3)
 /**
   * @brief This function handles USART3 global interrupt.
   */
@@ -369,7 +362,6 @@ void USART3_IRQHandler(void)
   }
   /* USER CODE END USART2_IRQn 1 */
 }
-#endif
 
 /******************************************************************************/
 /* STM32F1xx Peripheral Interrupt Handlers                                    */
