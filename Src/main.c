@@ -75,12 +75,6 @@ extern uint8_t enable;                  // global variable for motor enable
 
 extern int16_t batVoltage;              // global variable for battery voltage
 
-#if defined(SIDEBOARD_SERIAL_USART2)
-extern SerialSideboard Sideboard_L;
-#endif
-#if defined(SIDEBOARD_SERIAL_USART3)
-extern SerialSideboard Sideboard_R;
-#endif
 #if (defined(CONTROL_PPM_LEFT) && defined(DEBUG_SERIAL_USART3)) || (defined(CONTROL_PPM_RIGHT) && defined(DEBUG_SERIAL_USART2))
 extern volatile uint16_t ppm_captured_value[PPM_NUM_CHANNELS+1];
 #endif
@@ -141,11 +135,6 @@ static MultipleTap MultipleTapBrake;    // define multiple tap functionality for
 
 static uint16_t rate = RATE; // Adjustable rate to support multiple drive modes on startup
 
-#ifdef MULTI_MODE_DRIVE
-  static uint8_t drive_mode;
-  static uint16_t max_speed;
-#endif
-
 
 int main(void) {
 
@@ -190,46 +179,11 @@ int main(void) {
   int32_t board_temp_adcFixdt = adc_buffer.temp << 16;  // Fixed-point filter output initialized with current ADC converted to fixed-point
   int16_t board_temp_adcFilt  = adc_buffer.temp;
 
-  #ifdef MULTI_MODE_DRIVE
-    if (adc_buffer.l_tx2 > input1[0].min + 50 && adc_buffer.l_rx2 > input2[0].min + 50) {
-      drive_mode = 2;
-      max_speed = MULTI_MODE_DRIVE_M3_MAX;
-      rate = MULTI_MODE_DRIVE_M3_RATE;
-      rtP_Left.n_max = rtP_Right.n_max = MULTI_MODE_M3_N_MOT_MAX << 4;
-      rtP_Left.i_max = rtP_Right.i_max = (MULTI_MODE_M3_I_MOT_MAX * A2BIT_CONV) << 4;
-    } else if (adc_buffer.l_tx2 > input1[0].min + 50) {
-      drive_mode = 1;
-      max_speed = MULTI_MODE_DRIVE_M2_MAX;
-      rate = MULTI_MODE_DRIVE_M2_RATE;
-      rtP_Left.n_max = rtP_Right.n_max = MULTI_MODE_M2_N_MOT_MAX << 4;
-      rtP_Left.i_max = rtP_Right.i_max = (MULTI_MODE_M2_I_MOT_MAX * A2BIT_CONV) << 4;
-    } else {
-      drive_mode = 0;
-      max_speed = MULTI_MODE_DRIVE_M1_MAX;
-      rate = MULTI_MODE_DRIVE_M1_RATE;
-      rtP_Left.n_max = rtP_Right.n_max = MULTI_MODE_M1_N_MOT_MAX << 4;
-      rtP_Left.i_max = rtP_Right.i_max = (MULTI_MODE_M1_I_MOT_MAX * A2BIT_CONV) << 4;
-    }
-
-    printf("Drive mode %i selected: max_speed:%i acc_rate:%i \r\n", drive_mode, max_speed, rate);
-  #endif
-
-  #ifdef MULTI_MODE_DRIVE
-    // Wait until triggers are released. Exit if timeout elapses (to unblock if the inputs are not calibrated)
-    int iTimeout = 0;
-    while((adc_buffer.l_rx2 + adc_buffer.l_tx2) >= (input1[0].min + input2[0].min) && iTimeout++ < 300) {
-      HAL_Delay(10);
-    }
-  #endif
-
   while(1) {
     if (buzzerTimer - buzzerTimer_prev > 16*DELAY_IN_MAIN_LOOP) {   // 1 ms = 16 ticks buzzerTimer
 
     readCommand();                        // Read Command: input1[inIdx].cmd, input2[inIdx].cmd
     calcAvgSpeed();                       // Calculate average measured speed: speedAvg, speedAvgAbs
-
-    printf("HOLA A TODOS, COMO HAN ESTADO\r\n");
-    printf("todo bien o que???\r\n");
 
     // ####### MOTOR ENABLING: Only if the initial input is very small (for SAFETY) #######
     if (enable == 0 && !rtY_Left.z_errCode && !rtY_Right.z_errCode && 
@@ -272,21 +226,6 @@ int main(void) {
     #else
       pwml = cmdL;
     #endif
-
-    // ####### SIDEBOARDS HANDLING #######
-    #if defined(SIDEBOARD_SERIAL_USART2)
-      sideboardSensors((uint8_t)Sideboard_L.sensors);
-    #endif
-    #if defined(FEEDBACK_SERIAL_USART2)
-      sideboardLeds(&sideboard_leds_L);
-    #endif
-    #if defined(SIDEBOARD_SERIAL_USART3)
-      sideboardSensors((uint8_t)Sideboard_R.sensors);
-    #endif
-    #if defined(FEEDBACK_SERIAL_USART3)
-      sideboardLeds(&sideboard_leds_R);
-    #endif
-    
 
     // ####### CALC BOARD TEMPERATURE #######
     filtLowPass32(adc_buffer.temp, TEMP_FILT_COEF, &board_temp_adcFixdt);

@@ -43,17 +43,6 @@
     } SerialCommand;
   #endif
 #endif
-#if defined(SIDEBOARD_SERIAL_USART2) || defined(SIDEBOARD_SERIAL_USART3)
-    typedef struct{
-      uint16_t  start;
-      int16_t   pitch;      // Angle
-      int16_t   dPitch;     // Angle derivative
-      int16_t   cmd1;       // RC Channel 1
-      int16_t   cmd2;       // RC Channel 2
-      uint16_t  sensors;    // RC Switches and Optical sideboard sensors
-      uint16_t  checksum;
-    } SerialSideboard;
-#endif
 
 // Input Structure
 typedef struct {
@@ -100,13 +89,6 @@ void usart_process_debug(uint8_t *userCommand, uint32_t len);
 #if defined(CONTROL_SERIAL_USART2) || defined(CONTROL_SERIAL_USART3)
 void usart_process_command(SerialCommand *command_in, SerialCommand *command_out, uint8_t usart_idx);
 #endif
-#if defined(SIDEBOARD_SERIAL_USART2) || defined(SIDEBOARD_SERIAL_USART3)
-void usart_process_sideboard(SerialSideboard *Sideboard_in, SerialSideboard *Sideboard_out, uint8_t usart_idx);
-#endif
-
-// Sideboard functions
-void sideboardLeds(uint8_t *leds);
-void sideboardSensors(uint8_t sensors);
 
 // Poweroff Functions
 void saveConfig(void);
