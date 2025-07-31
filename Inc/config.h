@@ -188,22 +188,6 @@
  // ############################## END OF INPUT FORMAT ############################
 
 
-
-// ############################## CRUISE CONTROL SETTINGS ############################
-/* Cruise Control info:
- * enable CRUISE_CONTROL_SUPPORT and (SUPPORT_BUTTONS_LEFT or SUPPORT_BUTTONS_RIGHT depending on which cable is the button installed)
- * can be activated/deactivated by pressing button1 (Blue cable) to GND
- * when activated, it maintains the current speed by switching to SPD_MODE. Acceleration is still possible via the input request, but when released it resumes to previous set speed.
- * when deactivated, it returns to previous control MODE and follows the input request.
-*/
-// #define CRUISE_CONTROL_SUPPORT
-// #define SUPPORT_BUTTONS_LEFT              // Use button1 (Blue Left cable)  to activate/deactivate Cruise Control
-// #define SUPPORT_BUTTONS_RIGHT             // Use button1 (Blue Right cable) to activate/deactivate Cruise Control
-
-// ######################### END OF CRUISE CONTROL SETTINGS ##########################
-
-
-
 // ############################### DEBUG SERIAL ###############################
 /* Connect GND and RX of a 3.3v uart-usb adapter to the left (USART2) or right sensor board cable (USART3)
  * Be careful not to use the red wire of the cable. 15v will destroy everything.
@@ -238,7 +222,6 @@
   #define FLASH_WRITE_KEY      0x1002  // Flash memory writing key. Change this key to ignore the input calibrations from the flash memory and use the ones in config.h
 
   // #define TANK_STEERING              // use for tank steering, each input controls each wheel 
-  // #define SUPPORT_BUTTONS_LEFT       // use left sensor board cable for button inputs.  Disable DEBUG_SERIAL_USART2!
 #endif
 // ######################## END OF VARIANT_USART SETTINGS #########################
 

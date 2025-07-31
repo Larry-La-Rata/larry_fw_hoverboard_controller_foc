@@ -147,12 +147,7 @@ static uint32_t commandR_len = sizeof(commandR);
   #endif
 #endif
 
-#if defined(SUPPORT_BUTTONS) || defined(SUPPORT_BUTTONS_LEFT) || defined(SUPPORT_BUTTONS_RIGHT)
-static uint8_t button1;                 // Blue
-static uint8_t button2;                 // Green
-#endif
-
-#if defined(CRUISE_CONTROL_SUPPORT) || (defined(STANDSTILL_HOLD_ENABLE) && (CTRL_TYP_SEL == FOC_CTRL) && (CTRL_MOD_REQ != SPD_MODE))
+#if defined(STANDSTILL_HOLD_ENABLE) && (CTRL_TYP_SEL == FOC_CTRL) && (CTRL_MOD_REQ != SPD_MODE)
 static uint8_t cruiseCtrlAcv = 0;
 static uint8_t standstillAcv = 0;
 #endif
@@ -621,31 +616,6 @@ void electricBrake(uint16_t speedBlend, uint8_t reverseDir) {
 }
 
  /*
- * Cruise Control Function
- * This function activates/deactivates cruise control.
- * 
- * Input: button (as a pulse)
- * Output: cruiseCtrlAcv
- */
-void cruiseControl(uint8_t button) {
-  #ifdef CRUISE_CONTROL_SUPPORT
-    if (button && !rtP_Left.b_cruiseCtrlEna) {                          // Cruise control activated
-      rtP_Left.n_cruiseMotTgt   = rtY_Left.n_mot;
-      rtP_Right.n_cruiseMotTgt  = rtY_Right.n_mot;
-      rtP_Left.b_cruiseCtrlEna  = 1;
-      rtP_Right.b_cruiseCtrlEna = 1;
-      cruiseCtrlAcv = 1;
-      beepShortMany(2, 1);                                              // 200 ms beep delay. Acts as a debounce also.
-    } else if (button && rtP_Left.b_cruiseCtrlEna && !standstillAcv) {  // Cruise control deactivated if no Standstill Hold is active
-      rtP_Left.b_cruiseCtrlEna  = 0;
-      rtP_Right.b_cruiseCtrlEna = 0;
-      cruiseCtrlAcv = 0;
-      beepShortMany(2, -1);
-    }
-  #endif
-}
-
- /*
  * Check Input Type
  * This function identifies the input type: 0: Disabled, 1: Normal Pot, 2: Middle Resting Pot
  */
@@ -769,14 +739,6 @@ void readCommand(void) {
 
     handleTimeout();
 
-    #if defined(SUPPORT_BUTTONS_LEFT) || defined(SUPPORT_BUTTONS_RIGHT)
-      button1 = !HAL_GPIO_ReadPin(BUTTON1_PORT, BUTTON1_PIN);
-      button2 = !HAL_GPIO_ReadPin(BUTTON2_PORT, BUTTON2_PIN);
-    #endif
-
-    #if defined(CRUISE_CONTROL_SUPPORT) && (defined(SUPPORT_BUTTONS) || defined(SUPPORT_BUTTONS_LEFT) || defined(SUPPORT_BUTTONS_RIGHT))
-        cruiseControl(button1);                                           // Cruise control activation/deactivation
-    #endif
 }
 
 

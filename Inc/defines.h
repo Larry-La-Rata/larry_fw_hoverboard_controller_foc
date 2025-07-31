@@ -173,18 +173,6 @@
 #define PWM_PORT_CH2        GPIOB
 #endif
 
-#if defined(SUPPORT_BUTTONS_LEFT)
-#define BUTTON1_PIN         GPIO_PIN_2
-#define BUTTON1_PORT        GPIOA
-#define BUTTON2_PIN         GPIO_PIN_3
-#define BUTTON2_PORT        GPIOA
-#elif defined(SUPPORT_BUTTONS_RIGHT)
-#define BUTTON1_PIN         GPIO_PIN_10
-#define BUTTON1_PORT        GPIOB
-#define BUTTON2_PIN         GPIO_PIN_11
-#define BUTTON2_PORT        GPIOB
-#endif
-
 #define DELAY_TIM_FREQUENCY_US 1000000
 
 #define MILLI_R (R * 1000)
