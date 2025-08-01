@@ -123,7 +123,6 @@ static int32_t     steerFixdt;           // local fixed-point variable for steer
 static int32_t     speedFixdt;           // local fixed-point variable for speed low-pass filter
 
 static uint32_t    buzzerTimer_prev = 0;
-static uint32_t    inactivity_timeout_counter;
 static MultipleTap MultipleTapBrake;    // define multiple tap functionality for the Brake pedal
 
 static uint16_t rate = RATE; // Adjustable rate to support multiple drive modes on startup
@@ -299,27 +298,6 @@ int main(void) {
       beepCount(0, 0, 0);
       backwardDrive = 0;
     }
-
-
-    inactivity_timeout_counter++;
-
-    // ####### INACTIVITY TIMEOUT #######
-    if (abs(cmdL) > 50 || abs(cmdR) > 50) {
-      inactivity_timeout_counter = 0;
-    }
-
-    #if defined(STANDSTILL_HOLD_ENABLE)
-      if ((abs(rtP_Left.n_cruiseMotTgt)  > 50 && rtP_Left.b_cruiseCtrlEna) || 
-          (abs(rtP_Right.n_cruiseMotTgt) > 50 && rtP_Right.b_cruiseCtrlEna)) {
-        inactivity_timeout_counter = 0;
-      }
-    #endif
-
-    if (inactivity_timeout_counter > (INACTIVITY_TIMEOUT * 60 * 1000) / (DELAY_IN_MAIN_LOOP + 1)) {  // rest of main loop needs maybe 1ms
-      printf("Powering off, wheels were inactive for too long\r\n");
-      poweroff();
-    }
-
 
     // HAL_GPIO_TogglePin(LED_PORT, LED_PIN);                 // This is to measure the main() loop duration with an oscilloscope connected to LED_PIN
     // Update states
